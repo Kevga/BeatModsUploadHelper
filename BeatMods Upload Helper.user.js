@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BeatMods Upload Helper
 // @namespace    https://beatmods.com
-// @version      1.0.0
+// @version      1.0.1
 // @description  Aims to make BeatMods uploads a little less painful
 // @author       Dakari
 // @match        https://beatmods.com/*
@@ -104,6 +104,7 @@ function removeButton() {
 function onButtonClick(event) {
     event.preventDefault();
     event.stopPropagation();
+    removeAlert();
     fillModMetadata();
 }
 
@@ -161,7 +162,7 @@ function getDependenciesString() {
     let missingDependencies = [];
 
     modMetadata.dependencies.forEach(dependency => {
-        let matchedDependency = currentlyAvailableMods.filter(mod => mod._id === dependency._id);
+        let matchedDependency = currentlyAvailableMods.filter(mod => mod.name === dependency.name);
         if (!matchedDependency.length) {
             missingDependencies.push(dependency);
         } else {
