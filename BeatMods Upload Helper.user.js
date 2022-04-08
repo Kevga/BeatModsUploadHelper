@@ -1,0 +1,178 @@
+// ==UserScript==
+// @name         BeatMods Upload Helper
+// @namespace    https://beatmods.com
+// @version      1.0.0
+// @description  Aims to make BeatMods uploads a little less painful
+// @author       Dakari
+// @match        https://beatmods.com/*
+// @connect      beatmods.com
+// @run-at       document-idle
+// @grant        GM_xmlhttpRequest
+// ==/UserScript==
+
+let debounceTimeout;
+let debounceDuration = 500;
+let lastEnteredName = "";
+let modMetadata;
+let currentlyAvailableMods;
+let inputs = {};
+
+(function () {
+    'use strict';
+
+    window.addEventListener("load", () => {
+        //Form is not yet ready after page load
+        setTimeout(main, 500);
+    });
+})();
+
+function main() {
+    getInputReferences();
+
+    const nameInput = inputs.name;
+    if (!nameInput) {
+        return;
+    }
+
+    ["change", "input", "paste"].forEach(function (e) {
+        nameInput.addEventListener(e, onNameChanged, false);
+    });
+
+    getCurrentMods();
+}
+
+function getInputReferences() {
+    inputs.name = document.querySelector(".input-group:nth-of-type(1) > input:nth-child(2)");
+    inputs.gameVersion = document.querySelector(".input-group:nth-of-type(3) > select:nth-child(2)");
+    inputs.dependencies = document.querySelector(".input-group:nth-of-type(4) > input:nth-child(2)");
+    inputs.category = document.querySelector(".input-group:nth-of-type(5) > select:nth-child(2)");
+    inputs.description = document.querySelector(".input-group:nth-of-type(6) > textarea");
+    inputs.link = document.querySelector(".input-group:nth-of-type(7) > input:nth-child(2)");
+}
+
+function onNameChanged(event) {
+    let name = event.target.value;
+    name = name.trim();
+    if (!name || name === lastEnteredName) {
+        return;
+    }
+    lastEnteredName = name;
+    clearTimeout(debounceTimeout);
+    debounceTimeout = setTimeout(debouncedNameChanged.bind(this, name), debounceDuration)
+}
+
+function debouncedNameChanged(name) {
+    let escapedName = encodeURIComponent(name);
+    GM_xmlhttpRequest({
+        method: 'GET',
+        url: 'https://beatmods.com/api/v1/mod?search=' + escapedName + '&sort=uploadDate&sortDirection=-1',
+        onload: function (response) {
+            let mods = JSON.parse(response.responseText);
+
+            mods = mods?.filter(mod => mod.name.startsWith(name));
+            if (!mods?.length) {
+                return;
+            }
+
+            modMetadata = mods[0];
+            addButton();
+        }
+    });
+}
+
+function addButton() {
+    if (!modMetadata) {
+        return;
+    }
+
+    removeButton();
+
+    let nameInput = inputs.name;
+    let button = document.createElement('button');
+    button.id = "upload-helper-button";
+    button.innerText = "Fill data from " + modMetadata.name + " " + modMetadata.version;
+    button.className = "btn btn-info btn-block";
+    button.style.marginTop = "8px";
+    button.onclick = onButtonClick;
+    nameInput.insertAdjacentElement("afterend", button);
+}
+
+function removeButton() {
+    document.getElementById("upload-helper-button")?.remove();
+}
+
+function onButtonClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    fillModMetadata();
+}
+
+function getCurrentGameVersion() {
+    return inputs.gameVersion.querySelector("option:nth-child(1)").value;
+}
+
+function getCurrentMods() {
+    let version = getCurrentGameVersion();
+    GM_xmlhttpRequest({
+        method: 'GET',
+        url: 'https://beatmods.com/api/v1/mod?gameVersion=' + version,
+        onload: function (responseDetails) {
+            let mods = JSON.parse(responseDetails.responseText);
+            if (!mods?.length) {
+                return;
+            }
+            currentlyAvailableMods = mods;
+        }
+    });
+}
+
+function fillModMetadata() {
+    let nameInput = inputs.name;
+    if (nameInput.value !== modMetadata.name) {
+        lastEnteredName = modMetadata.name;
+        nameInput.value = modMetadata.name;
+    }
+
+    inputs.category.value = modMetadata.category;
+    inputs.description.value = modMetadata.description;
+    inputs.link.value = modMetadata.link;
+    inputs.dependencies.value = getDependenciesString() ?? "";
+}
+
+function createAlert(text) {
+    removeAlert();
+    let alertDiv = document.createElement('div');
+    alertDiv.id = "upload-helper-alert";
+    alertDiv.innerHTML = text;
+    alertDiv.className = "alert alert-danger fade show";
+    document.querySelector(".upload > hr:nth-child(7)").insertAdjacentElement("afterend", alertDiv);
+}
+
+function removeAlert() {
+    document.getElementById("upload-helper-alert")?.remove();
+}
+
+function getDependenciesString() {
+    if (!modMetadata || !currentlyAvailableMods) {
+        return;
+    }
+
+    let dependencies = [];
+    let missingDependencies = [];
+
+    modMetadata.dependencies.forEach(dependency => {
+        let matchedDependency = currentlyAvailableMods.filter(mod => mod._id === dependency._id);
+        if (!matchedDependency.length) {
+            missingDependencies.push(dependency);
+        } else {
+            dependencies.push(matchedDependency[0]);
+        }
+    });
+
+    if (missingDependencies.length) {
+        createAlert("The following dependencies appear to not have been uploaded for the current game version:<br><br><ul>" +
+            missingDependencies.map(dep => "<li>" + dep.name + "</li>").join("")) + "</ul>";
+    }
+
+    return dependencies.map(dep => dep.name + "@" + dep.version).join(",");
+}
