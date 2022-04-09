@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         BeatMods Upload Helper
 // @namespace    https://beatmods.com
-// @version      1.0.3
+// @version      1.0.4
 // @description  Aims to make BeatMods uploads a little less painful
 // @author       Dakari
+// @updateURL    https://github.com/Kevga/BeatModsUploadHelper/raw/master/BeatMods%20Upload%20Helper.user.js
+// @downloadURL  https://github.com/Kevga/BeatModsUploadHelper/raw/master/BeatMods%20Upload%20Helper.user.js
 // @match        https://beatmods.com/*
-// @connect      beatmods.com
 // @run-at       document-idle
-// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
 let debounceTimeout;
@@ -82,21 +82,20 @@ function onNameChanged(event) {
 
 function debouncedNameChanged(name) {
     let escapedName = encodeURIComponent(name);
-    GM_xmlhttpRequest({
-        method: 'GET',
-        url: 'https://beatmods.com/api/v1/mod?search=' + escapedName + '&sort=uploadDate&sortDirection=-1',
-        onload: function (response) {
-            let mods = JSON.parse(response.responseText);
+    let xhr = new XMLHttpRequest();
+    xhr.onload = () => {
+        let mods = JSON.parse(xhr.response);
 
-            mods = mods?.filter(mod => mod.name.startsWith(name));
-            if (!mods?.length) {
-                return;
-            }
-
-            modMetadata = mods[0];
-            addButton();
+        mods = mods?.filter(mod => mod.name.startsWith(name));
+        if (!mods?.length) {
+            return;
         }
-    });
+
+        modMetadata = mods[0];
+        addButton();
+    };
+    xhr.open('GET', 'https://beatmods.com/api/v1/mod?search=' + escapedName + '&sort=uploadDate&sortDirection=-1');
+    xhr.send();
 }
 
 function addButton() {
@@ -133,17 +132,16 @@ function getCurrentGameVersion() {
 
 function getCurrentMods() {
     let version = getCurrentGameVersion();
-    GM_xmlhttpRequest({
-        method: 'GET',
-        url: 'https://beatmods.com/api/v1/mod?gameVersion=' + version + '&sort=uploadDate&sortDirection=-1',
-        onload: function (responseDetails) {
-            let mods = JSON.parse(responseDetails.responseText);
-            if (!mods?.length) {
-                return;
-            }
-            currentlyAvailableMods = mods;
+    let xhr = new XMLHttpRequest();
+    xhr.onload = () => {
+        let mods = JSON.parse(xhr.response);
+        if (!mods?.length) {
+            return;
         }
-    });
+        currentlyAvailableMods = mods;
+    };
+    xhr.open('GET', 'https://beatmods.com/api/v1/mod?gameVersion=' + version + '&sort=uploadDate&sortDirection=-1');
+    xhr.send();
 }
 
 function fillModMetadata() {
