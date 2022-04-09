@@ -2,7 +2,7 @@
 Aims to make BeatMods uploads a little less painful
 
 ## Features
-- Searches for previous releases of your mod and offers auto-fill of its metadata via button press
-- Automatically enters the latest version of your mods dependencies
+- Searches for previous releases of your mod and offers auto-fill of its metadata
+- Updates dependencies to the latest available version
 - Informs you if one or more dependencies are not yet available for the current game version
 

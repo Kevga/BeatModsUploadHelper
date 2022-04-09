@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BeatMods Upload Helper
 // @namespace    https://beatmods.com
-// @version      1.0.1
+// @version      1.0.2
 // @description  Aims to make BeatMods uploads a little less painful
 // @author       Dakari
 // @match        https://beatmods.com/*
@@ -39,6 +39,8 @@ function main() {
     });
 
     getCurrentMods();
+
+    console.info("Uploads helper userscript initialized")
 }
 
 function getInputReferences() {
@@ -116,7 +118,7 @@ function getCurrentMods() {
     let version = getCurrentGameVersion();
     GM_xmlhttpRequest({
         method: 'GET',
-        url: 'https://beatmods.com/api/v1/mod?gameVersion=' + version,
+        url: 'https://beatmods.com/api/v1/mod?gameVersion=' + version + '&sort=uploadDate&sortDirection=-1',
         onload: function (responseDetails) {
             let mods = JSON.parse(responseDetails.responseText);
             if (!mods?.length) {
@@ -162,7 +164,7 @@ function getDependenciesString() {
     let missingDependencies = [];
 
     modMetadata.dependencies.forEach(dependency => {
-        let matchedDependency = currentlyAvailableMods.filter(mod => mod.name === dependency.name);
+        let matchedDependency = currentlyAvailableMods.filter(mod => mod.name === dependency.name && mod.status !== "declined");
         if (!matchedDependency.length) {
             missingDependencies.push(dependency);
         } else {
