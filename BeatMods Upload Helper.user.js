@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BeatMods Upload Helper
 // @namespace    https://beatmods.com
-// @version      1.0.2
+// @version      1.0.3
 // @description  Aims to make BeatMods uploads a little less painful
 // @author       Dakari
 // @match        https://beatmods.com/*
@@ -16,15 +16,31 @@ let lastEnteredName = "";
 let modMetadata;
 let currentlyAvailableMods;
 let inputs = {};
+let isOnUploadsPage = false;
 
 (function () {
     'use strict';
 
     window.addEventListener("load", () => {
         //Form is not yet ready after page load
-        setTimeout(main, 500);
+        setInterval(loop, 500);
     });
 })();
+
+function loop() {
+    let form = document.querySelector("form.upload");
+    if (!form) {
+        isOnUploadsPage = false;
+        return;
+    }
+
+    if (isOnUploadsPage) {
+        return;
+    }
+
+    isOnUploadsPage = true;
+    main();
+}
 
 function main() {
     getInputReferences();
@@ -58,6 +74,7 @@ function onNameChanged(event) {
     if (!name || name === lastEnteredName) {
         return;
     }
+    removeButton();
     lastEnteredName = name;
     clearTimeout(debounceTimeout);
     debounceTimeout = setTimeout(debouncedNameChanged.bind(this, name), debounceDuration)
