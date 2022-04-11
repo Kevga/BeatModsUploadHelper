@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BeatMods Upload Helper
 // @namespace    https://beatmods.com
-// @version      1.0.4
+// @version      1.1.0
 // @description  Aims to make BeatMods uploads a little less painful
 // @author       Dakari
 // @updateURL    https://github.com/Kevga/BeatModsUploadHelper/raw/master/BeatMods%20Upload%20Helper.user.js
@@ -11,12 +11,13 @@
 // ==/UserScript==
 
 let debounceTimeout;
-let debounceDuration = 500;
+let debounceDuration = 300;
 let lastEnteredName = "";
 let modMetadata;
 let currentlyAvailableMods;
 let inputs = {};
 let isOnUploadsPage = false;
+let searchXHR;
 
 (function () {
     'use strict';
@@ -39,10 +40,10 @@ function loop() {
     }
 
     isOnUploadsPage = true;
-    main();
+    init();
 }
 
-function main() {
+function init() {
     getInputReferences();
 
     const nameInput = inputs.name;
@@ -56,11 +57,12 @@ function main() {
 
     getCurrentMods();
 
-    console.info("Uploads helper userscript initialized")
+    console.info("BeatModsUploadHelper initialized")
 }
 
 function getInputReferences() {
     inputs.name = document.querySelector(".input-group:nth-of-type(1) > input:nth-child(2)");
+    inputs.version = document.querySelector(".input-group:nth-of-type(2) > input:nth-child(2)");
     inputs.gameVersion = document.querySelector(".input-group:nth-of-type(3) > select:nth-child(2)");
     inputs.dependencies = document.querySelector(".input-group:nth-of-type(4) > input:nth-child(2)");
     inputs.category = document.querySelector(".input-group:nth-of-type(5) > select:nth-child(2)");
@@ -71,22 +73,40 @@ function getInputReferences() {
 function onNameChanged(event) {
     let name = event.target.value;
     name = name.trim();
-    if (!name || name === lastEnteredName) {
+
+    if (!name) {
+        lastEnteredName = "";
+        abortXHR();
         return;
     }
+
+    if (name === lastEnteredName) {
+        return;
+    }
+
+    abortXHR();
     removeButton();
     lastEnteredName = name;
     clearTimeout(debounceTimeout);
     debounceTimeout = setTimeout(debouncedNameChanged.bind(this, name), debounceDuration)
 }
 
+function abortXHR() {
+    if (searchXHR) {
+        searchXHR.abort();
+    }
+
+    removeSpinner();
+}
+
 function debouncedNameChanged(name) {
     let escapedName = encodeURIComponent(name);
-    let xhr = new XMLHttpRequest();
-    xhr.onload = () => {
-        let mods = JSON.parse(xhr.response);
+    searchXHR = new XMLHttpRequest();
+    searchXHR.onload = () => {
+        removeSpinner();
+        let mods = JSON.parse(searchXHR.response);
 
-        mods = mods?.filter(mod => mod.name.startsWith(name));
+        mods = mods?.filter(mod => mod.name.toLowerCase().startsWith(name.toLowerCase()));
         if (!mods?.length) {
             return;
         }
@@ -94,11 +114,14 @@ function debouncedNameChanged(name) {
         modMetadata = mods[0];
         addButton();
     };
-    xhr.open('GET', 'https://beatmods.com/api/v1/mod?search=' + escapedName + '&sort=uploadDate&sortDirection=-1');
-    xhr.send();
+    searchXHR.open('GET', 'https://beatmods.com/api/v1/mod?search=' + escapedName + '&sort=uploadDate&sortDirection=-1');
+    searchXHR.send();
+    addSpinner();
 }
 
 function addButton() {
+    removeSpinner();
+
     if (!modMetadata) {
         return;
     }
@@ -119,11 +142,27 @@ function removeButton() {
     document.getElementById("upload-helper-button")?.remove();
 }
 
+function addSpinner() {
+    removeSpinner();
+
+    let nameInput = inputs.name;
+    let spinner = document.createElement('div');
+    spinner.id = "upload-helper-spinner";
+    spinner.className = "spinner-border";
+    spinner.setAttribute('style', 'margin-top: 8px; width: 2rem!important');
+    nameInput.insertAdjacentElement("afterend", spinner);
+}
+
+function removeSpinner() {
+    document.getElementById("upload-helper-spinner")?.remove();
+}
+
 function onButtonClick(event) {
     event.preventDefault();
     event.stopPropagation();
     removeAlert();
     fillModMetadata();
+    inputs.version.focus();
 }
 
 function getCurrentGameVersion() {
@@ -140,7 +179,7 @@ function getCurrentMods() {
         }
         currentlyAvailableMods = mods;
     };
-    xhr.open('GET', 'https://beatmods.com/api/v1/mod?gameVersion=' + version + '&sort=uploadDate&sortDirection=-1');
+    xhr.open('GET', 'https://beatmods.com/api/v1/mod?gameVersion=' + version + '&sort=uploadDate&sortDirection=-1&status[]=approved&status[]=pending');
     xhr.send();
 }
 
@@ -179,7 +218,7 @@ function getDependenciesString() {
     let missingDependencies = [];
 
     modMetadata.dependencies.forEach(dependency => {
-        let matchedDependency = currentlyAvailableMods.filter(mod => mod.name === dependency.name && mod.status !== "declined");
+        let matchedDependency = currentlyAvailableMods.filter(mod => mod.name === dependency.name);
         if (!matchedDependency.length) {
             missingDependencies.push(dependency);
         } else {
