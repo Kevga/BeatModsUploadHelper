@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BeatMods Upload Helper
 // @namespace    https://beatmods.com
-// @version      1.1.0
+// @version      1.2.0
 // @description  Aims to make BeatMods uploads a little less painful
 // @author       Dakari
 // @updateURL    https://github.com/Kevga/BeatModsUploadHelper/raw/master/BeatMods%20Upload%20Helper.user.js
@@ -15,59 +15,70 @@ let debounceDuration = 300;
 let lastEnteredName = "";
 let modMetadata;
 let currentlyAvailableMods;
-let inputs = {};
-let isOnUploadsPage = false;
+let inputs;
 let searchXHR;
+let initLoopInterval;
 
 (function () {
-    'use strict';
-
-    window.addEventListener("load", () => {
-        //Form is not yet ready after page load
-        setInterval(loop, 500);
-    });
+    window.addEventListener("hashchange", onLocationChanged, false);
+    onLocationChanged();
 })();
 
-function loop() {
-    let form = document.querySelector("form.upload");
-    if (!form) {
-        isOnUploadsPage = false;
+function onLocationChanged() {
+    if (window.location.hash !== '#/mods/upload') {
         return;
     }
 
-    if (isOnUploadsPage) {
-        return;
+    // Chrome has the page ready at the "load" event, but Firefox doesn't.
+    // If it's not ready, wait for it to be ready.
+    if (isPageReady()) {
+        initialize();
+    } else {
+        initLoopInterval = setInterval(initLoop, 100);
     }
-
-    isOnUploadsPage = true;
-    init();
 }
 
-function init() {
-    getInputReferences();
+function initLoop() {
+    if (isPageReady()) {
+        clearInterval(initLoopInterval);
+        initialize();
+    }
+}
 
+function isPageReady() {
+    return document.querySelector("form.upload") !== null;
+}
+
+function initialize() {
+    updateInputReferences();
     const nameInput = inputs.name;
     if (!nameInput) {
+        console.error("[BeatModsUploadHelper] Failed to find name input field")
         return;
     }
 
-    ["change", "input", "paste"].forEach(function (e) {
-        nameInput.addEventListener(e, onNameChanged, false);
+    //Increase default height of description textarea from 2 to 4 lines to fit all 200 allowed characters
+    inputs.description.style.height = "100px";
+
+    ["change", "input", "paste"].forEach(function (eventKey) {
+        nameInput.addEventListener(eventKey, onNameChanged, false);
     });
 
     getCurrentMods();
 
-    console.info("BeatModsUploadHelper initialized")
+    console.info("[BeatModsUploadHelper] Initialized")
 }
 
-function getInputReferences() {
-    inputs.name = document.querySelector(".input-group:nth-of-type(1) > input:nth-child(2)");
-    inputs.version = document.querySelector(".input-group:nth-of-type(2) > input:nth-child(2)");
-    inputs.gameVersion = document.querySelector(".input-group:nth-of-type(3) > select:nth-child(2)");
-    inputs.dependencies = document.querySelector(".input-group:nth-of-type(4) > input:nth-child(2)");
-    inputs.category = document.querySelector(".input-group:nth-of-type(5) > select:nth-child(2)");
-    inputs.description = document.querySelector(".input-group:nth-of-type(6) > textarea");
-    inputs.link = document.querySelector(".input-group:nth-of-type(7) > input:nth-child(2)");
+function updateInputReferences() {
+    inputs = {
+        name: document.querySelector(".input-group:nth-of-type(1) > input:nth-child(2)"),
+        version: document.querySelector(".input-group:nth-of-type(2) > input:nth-child(2)"),
+        gameVersion: document.querySelector(".input-group:nth-of-type(3) > select:nth-child(2)"),
+        dependencies: document.querySelector(".input-group:nth-of-type(4) > input:nth-child(2)"),
+        category: document.querySelector(".input-group:nth-of-type(5) > select:nth-child(2)"),
+        description: document.querySelector(".input-group:nth-of-type(6) > textarea"),
+        link: document.querySelector(".input-group:nth-of-type(7) > input:nth-child(2)")
+    };
 }
 
 function onNameChanged(event) {
@@ -76,6 +87,7 @@ function onNameChanged(event) {
 
     if (!name) {
         lastEnteredName = "";
+        removeButton();
         abortXHR();
         return;
     }
@@ -96,6 +108,7 @@ function abortXHR() {
         searchXHR.abort();
     }
 
+    clearTimeout(debounceTimeout);
     removeSpinner();
 }
 
@@ -161,6 +174,7 @@ function onButtonClick(event) {
     event.preventDefault();
     event.stopPropagation();
     removeAlert();
+    removeButton();
     fillModMetadata();
     inputs.version.focus();
 }
