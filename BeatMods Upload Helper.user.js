@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BeatMods Upload Helper
 // @namespace    https://beatmods.com
-// @version      1.2.0
+// @version      1.3.0
 // @description  Aims to make BeatMods uploads a little less painful
 // @author       Dakari
 // @updateURL    https://github.com/Kevga/BeatModsUploadHelper/raw/master/BeatMods%20Upload%20Helper.user.js
@@ -13,7 +13,6 @@
 let debounceTimeout;
 let debounceDuration = 300;
 let lastEnteredName = "";
-let modMetadata;
 let currentlyAvailableMods;
 let inputs;
 let searchXHR;
@@ -89,6 +88,7 @@ function onNameChanged(event) {
         lastEnteredName = "";
         removeButton();
         abortXHR();
+        removeSpinner();
         return;
     }
 
@@ -98,6 +98,7 @@ function onNameChanged(event) {
 
     abortXHR();
     removeButton();
+    addSpinner();
     lastEnteredName = name;
     clearTimeout(debounceTimeout);
     debounceTimeout = setTimeout(debouncedNameChanged.bind(this, name), debounceDuration)
@@ -109,7 +110,6 @@ function abortXHR() {
     }
 
     clearTimeout(debounceTimeout);
-    removeSpinner();
 }
 
 function debouncedNameChanged(name) {
@@ -117,6 +117,7 @@ function debouncedNameChanged(name) {
     searchXHR = new XMLHttpRequest();
     searchXHR.onload = () => {
         removeSpinner();
+        removeButton();
         let mods = JSON.parse(searchXHR.response);
 
         mods = mods?.filter(mod => mod.name.toLowerCase().startsWith(name.toLowerCase()));
@@ -124,39 +125,51 @@ function debouncedNameChanged(name) {
             return;
         }
 
-        modMetadata = mods[0];
-        addButton();
+
+        let mostRecentMod = mods[0];
+        addButton(mostRecentMod);
+
+        if (mostRecentMod?.status !== "approved") {
+            let mostRecentNonDeclinedMod = mods.find(mod => mod.status === "approved");
+            if (mostRecentNonDeclinedMod) {
+                addButton(mostRecentNonDeclinedMod);
+            }
+        }
     };
     searchXHR.open('GET', 'https://beatmods.com/api/v1/mod?search=' + escapedName + '&sort=uploadDate&sortDirection=-1');
     searchXHR.send();
     addSpinner();
 }
 
-function addButton() {
-    removeSpinner();
-
+function addButton(modMetadata) {
     if (!modMetadata) {
         return;
     }
 
-    removeButton();
-
     let nameInput = inputs.name;
     let button = document.createElement('button');
-    button.id = "upload-helper-button";
-    button.innerText = "Fill data from " + modMetadata.name + " " + modMetadata.version;
-    button.className = "btn btn-info btn-block";
+    button.innerText = "Fill data from " + modMetadata.name + " " + modMetadata.version + " (by " + modMetadata.author.username + ")";
+    button.className = "btn btn-block";
     button.style.marginTop = "8px";
-    button.onclick = onButtonClick;
+    button.onclick = (event) => onButtonClick(event, modMetadata);
     nameInput.insertAdjacentElement("afterend", button);
+    button.classList.add("upload-helper-button");
+    button.classList.add(
+        modMetadata.status === "approved" ? "btn-success" : 
+        modMetadata.status === "declined" ? "btn-danger" :
+        modMetadata.status === "pending" ? "btn-warning" : 
+        "btn-info"
+    )
 }
 
 function removeButton() {
-    document.getElementById("upload-helper-button")?.remove();
+    document.querySelectorAll(".upload-helper-button").forEach(button => button.remove());
 }
 
 function addSpinner() {
-    removeSpinner();
+    if (document.getElementById("upload-helper-spinner")) {
+        return;
+    }
 
     let nameInput = inputs.name;
     let spinner = document.createElement('div');
@@ -170,12 +183,12 @@ function removeSpinner() {
     document.getElementById("upload-helper-spinner")?.remove();
 }
 
-function onButtonClick(event) {
+function onButtonClick(event, modMetadata) {
     event.preventDefault();
     event.stopPropagation();
     removeAlert();
     removeButton();
-    fillModMetadata();
+    fillModMetadata(modMetadata);
     inputs.version.focus();
 }
 
@@ -197,7 +210,7 @@ function getCurrentMods() {
     xhr.send();
 }
 
-function fillModMetadata() {
+function fillModMetadata(modMetadata) {
     let nameInput = inputs.name;
     if (nameInput.value !== modMetadata.name) {
         lastEnteredName = modMetadata.name;
@@ -207,7 +220,7 @@ function fillModMetadata() {
     inputs.category.value = modMetadata.category;
     inputs.description.value = modMetadata.description;
     inputs.link.value = modMetadata.link;
-    inputs.dependencies.value = getDependenciesString() ?? "";
+    inputs.dependencies.value = getDependenciesString(modMetadata) ?? "";
 }
 
 function createAlert(text) {
@@ -223,7 +236,7 @@ function removeAlert() {
     document.getElementById("upload-helper-alert")?.remove();
 }
 
-function getDependenciesString() {
+function getDependenciesString(modMetadata) {
     if (!modMetadata || !currentlyAvailableMods) {
         return;
     }
