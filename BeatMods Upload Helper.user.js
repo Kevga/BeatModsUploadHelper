@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BeatMods Upload Helper
 // @namespace    https://beatmods.com
-// @version      1.3.0
+// @version      1.4.0
 // @description  Aims to make BeatMods uploads a little less painful
 // @author       Dakari
 // @updateURL    https://github.com/Kevga/BeatModsUploadHelper/raw/master/BeatMods%20Upload%20Helper.user.js
@@ -62,6 +62,17 @@ function initialize() {
     ["change", "input", "paste"].forEach(function (eventKey) {
         nameInput.addEventListener(eventKey, onNameChanged, false);
     });
+
+    //vv
+    inputs.version.addEventListener("paste", (evt) => {
+        setTimeout(() => {
+            let fixedVersion = evt.target.value.trim();
+            if (fixedVersion.startsWith("v")) {
+                fixedVersion = fixedVersion.substring(1);
+            }
+            inputs.version.value = fixedVersion;
+        }, 0);
+    })
 
     getCurrentMods();
 
@@ -155,10 +166,10 @@ function addButton(modMetadata) {
     nameInput.insertAdjacentElement("afterend", button);
     button.classList.add("upload-helper-button");
     button.classList.add(
-        modMetadata.status === "approved" ? "btn-success" : 
-        modMetadata.status === "declined" ? "btn-danger" :
-        modMetadata.status === "pending" ? "btn-warning" : 
-        "btn-info"
+        modMetadata.status === "approved" ? "btn-success" :
+            modMetadata.status === "declined" ? "btn-danger" :
+                modMetadata.status === "pending" ? "btn-warning" :
+                    "btn-info"
     )
 }
 
