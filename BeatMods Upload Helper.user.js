@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BeatMods Upload Helper
 // @namespace    https://beatmods.com
-// @version      1.4.0
+// @version      1.5.0
 // @description  Aims to make BeatMods uploads a little less painful
 // @author       Dakari
 // @updateURL    https://github.com/Kevga/BeatModsUploadHelper/raw/master/BeatMods%20Upload%20Helper.user.js
@@ -87,7 +87,8 @@ function updateInputReferences() {
         dependencies: document.querySelector(".input-group:nth-of-type(4) > input:nth-child(2)"),
         category: document.querySelector(".input-group:nth-of-type(5) > select:nth-child(2)"),
         description: document.querySelector(".input-group:nth-of-type(6) > textarea"),
-        link: document.querySelector(".input-group:nth-of-type(7) > input:nth-child(2)")
+        link: document.querySelector(".input-group:nth-of-type(7) > input:nth-child(2)"),
+        file: document.querySelector(".form-control-file")
     };
 }
 
@@ -136,14 +137,13 @@ function debouncedNameChanged(name) {
             return;
         }
 
-
         let mostRecentMod = mods[0];
-        addButton(mostRecentMod);
+        addFillSuggestion(mostRecentMod);
 
         if (mostRecentMod?.status !== "approved") {
             let mostRecentNonDeclinedMod = mods.find(mod => mod.status === "approved");
             if (mostRecentNonDeclinedMod) {
-                addButton(mostRecentNonDeclinedMod);
+                addFillSuggestion(mostRecentNonDeclinedMod);
             }
         }
     };
@@ -152,18 +152,47 @@ function debouncedNameChanged(name) {
     addSpinner();
 }
 
-function addButton(modMetadata) {
+function addFillSuggestion(modMetadata) {
     if (!modMetadata) {
         return;
     }
 
     let nameInput = inputs.name;
+    let container = document.createElement('div');
+    container.className = "upload-helper-container";
+    container.style.display = "flex";
+    container.style.flexDirection = "row";
+    container.style.marginTop = "8px";
+    container.style.border = "1px solid #8ad4ee";
+    container.style.borderRadius = "3px";
+    container.style.padding = "0.375rem 0.75rem";
+    nameInput.insertAdjacentElement("afterend", container);
+
+    let span = document.createElement('span');
+    span.innerHTML = modMetadata.name + " " + modMetadata.version + " (" + modMetadata.author.username + ")";
+    span.style.width = "50%";
+    span.style.display = "inline-flex";
+    span.style.alignItems = "center";
+    span.style.flexGrow = "1";
+    
+    container.insertAdjacentElement("beforeend", span);
+
+    let reuploadButton = addButton(container, modMetadata, "Reupload", onReuploadButtonClick)
+    if (modMetadata.gameVersion === getCurrentGameVersion()) {
+        reuploadButton.onclick = undefined;
+        reuploadButton.style.visibility = "hidden";
+    }
+
+    addButton(container, modMetadata, "Fill data", onFillButtonClick)
+}
+
+function addButton(container, modMetadata, label, callback) {
     let button = document.createElement('button');
-    button.innerText = "Fill data from " + modMetadata.name + " " + modMetadata.version + " (by " + modMetadata.author.username + ")";
-    button.className = "btn btn-block";
-    button.style.marginTop = "8px";
-    button.onclick = (event) => onButtonClick(event, modMetadata);
-    nameInput.insertAdjacentElement("afterend", button);
+    button.innerText = label;
+    button.className = "btn";
+    button.style.alignSelf = "center";
+    button.style.marginLeft = "8px";
+    container.insertAdjacentElement("beforeend", button);
     button.classList.add("upload-helper-button");
     button.classList.add(
         modMetadata.status === "approved" ? "btn-success" :
@@ -171,10 +200,13 @@ function addButton(modMetadata) {
                 modMetadata.status === "pending" ? "btn-warning" :
                     "btn-info"
     )
+    button.onclick = (event) => callback(event, modMetadata);
+
+    return button;
 }
 
 function removeButton() {
-    document.querySelectorAll(".upload-helper-button").forEach(button => button.remove());
+    document.querySelectorAll(".upload-helper-container").forEach(element => element.remove());
 }
 
 function addSpinner() {
@@ -194,13 +226,34 @@ function removeSpinner() {
     document.getElementById("upload-helper-spinner")?.remove();
 }
 
-function onButtonClick(event, modMetadata) {
+function onFillButtonClick(event, modMetadata) {
     event.preventDefault();
     event.stopPropagation();
     removeAlert();
     removeButton();
     fillModMetadata(modMetadata);
     inputs.version.focus();
+}
+
+function onReuploadButtonClick(event, modMetadata) {
+    event.preventDefault();
+    event.stopPropagation();
+    removeAlert();
+    removeButton();
+    fillModMetadata(modMetadata);
+
+    const url = modMetadata.downloads.find(d => d.type === "universal").url;
+
+    fetch(url).then(res => {
+        res.blob().then(blob => {
+            let filename = /\/([^\/]+\.zip)/.exec(url)[1];
+            let file = new File([blob], filename, {type:"application/zip", lastModified: modMetadata.uploadDate});
+            let container = new DataTransfer();
+            container.items.add(file);
+            inputs.file.files = container.files;
+            inputs.version.value = modMetadata.version;
+        })
+    })
 }
 
 function getCurrentGameVersion() {
