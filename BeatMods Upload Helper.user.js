@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BeatMods Upload Helper
 // @namespace    https://beatmods.com
-// @version      1.5.0
+// @version      1.5.1
 // @description  Aims to make BeatMods uploads a little less painful
 // @author       Dakari
 // @updateURL    https://github.com/Kevga/BeatModsUploadHelper/raw/master/BeatMods%20Upload%20Helper.user.js
