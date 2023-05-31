@@ -132,6 +132,7 @@ function debouncedNameChanged(name) {
         removeButton();
         let mods = JSON.parse(searchXHR.response);
 
+        mods?.sort((a, b) => a.name.length - b.name.length);
         mods = mods?.filter(mod => mod.name.toLowerCase().startsWith(name.toLowerCase()));
         if (!mods?.length) {
             return;
